@@ -16,12 +16,15 @@ import logging
 logging.basicConfig(level=logging.INFO)
 import torch
 import csv
-import cld3
+from langdetect import DetectorFactory, detect_langs
+from langdetect.lang_detect_exception import LangDetectException
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
 
 random.seed(112)
+DetectorFactory.seed = 0
+LANG_PROB_THRESHOLD = 0.8
 
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-Instruct")
@@ -42,7 +45,6 @@ def tracefunc(frame, event, arg, indent=[0]):
 def Prompting(model, prompt, candidate_premature_layers):
     inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
     hidden_states, outputs = model.generate(**{'input_ids':inputs.input_ids, 'max_new_tokens':64})
-    # hidden_states, outputs = model.generate(**{'input_ids':inputs.input_ids})
     hidden_embed = {}
     hidden_embed_token_level = {}
     for i, early_exit_layer in enumerate(candidate_premature_layers):
@@ -59,14 +61,25 @@ def layerwise_lang_stats(hidden_embed_token_level, candidate_langs=['en', 'zh', 
     for layer in hidden_embed_token_level:
         lang_stats[layer] = {'total_count':0}
         for token in hidden_embed_token_level[layer]:
-            lang_pred = cld3.get_language(token)
-            if lang_pred:
-                if (lang_pred.is_reliable) and (lang_pred.language in candidate_langs):
-                    lang_stats[layer]['total_count'] += 1
-                    if lang_pred.language in lang_stats[layer]:
-                        lang_stats[layer][lang_pred.language] += 1
-                    else:
-                        lang_stats[layer][lang_pred.language] = 1
+            try:
+                lang_candidates = detect_langs(token)
+            except LangDetectException:
+                lang_candidates = []
+
+            if not lang_candidates:
+                continue
+
+            best_candidate = max(lang_candidates, key=lambda candidate: candidate.prob)
+            if best_candidate.prob < LANG_PROB_THRESHOLD:
+                continue
+
+            lang_code = best_candidate.lang
+            if lang_code in candidate_langs:
+                lang_stats[layer]['total_count'] += 1
+                if lang_code in lang_stats[layer]:
+                    lang_stats[layer][lang_code] += 1
+                else:
+                    lang_stats[layer][lang_code] = 1
     return lang_stats
 
 
@@ -305,4 +318,3 @@ def main(argv):
 if __name__ == "__main__":
     # sys.setprofile(tracefunc)
     main(sys.argv[1:])
-
