@@ -8,9 +8,10 @@
 
 Мы используем [uv](https://github.com/astral-sh/uv) и Python 3.12.
 
-В корне репозитория:
+В корне:
 
    ```bash
+   git clone -b reprod --single-branch https://github.com/IsachenkoBogdan/multilingual_analysis
    curl -LsSf https://astral.sh/uv/install.sh | sh
    uv python install 3.12
    uv venv --python 3.12 .venv
