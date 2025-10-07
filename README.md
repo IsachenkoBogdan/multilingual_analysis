@@ -6,20 +6,16 @@
 
 ## Подготовка окружения
 
-Мы используем [uv](https://github.com/astral-sh/uv) и Python 3.12.
+Мы используем стандартный `pip` и Python 3.12 — никаких дополнительных менеджеров не требуется.
 
 В корне:
 
    ```bash
    git clone -b reprod --single-branch https://github.com/IsachenkoBogdan/multilingual_analysis
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   uv python install 3.12
-   uv venv --python 3.12 .venv
+   python -m venv .venv
    source .venv/bin/activate
-   uv sync
+   pip install -r requirements.txt
    ```
-
-   Команда `uv sync` создаст lock-файл и поставит зависимости из `pyproject.toml`/`requirement.txt`.
 
 ## Запуск экспериментальных скриптов
 
@@ -44,7 +40,7 @@
 
 ## Изменения, внесённые нами
 
-- Добавлен `pyproject.toml`; версии зависимостей зафиксированы для воспроизводимости.
+- Зависимости вынесены в `requirements.txt` для воспроизводимости.
 - Все скрипты используют `langdetect` вместо `cld3` (в соответствии с зависимостями).
 - Исправлены ошибки форматирования и параметры генерации, упомянутые в открытых issues (см. историю коммитов).
-- Добавлены указания по созданию окружения через uv и использованию Python 3.12.
+- Добавлены указания по созданию окружения через стандартный `pip` и использованию Python 3.12.
