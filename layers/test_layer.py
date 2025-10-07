@@ -1,8 +1,6 @@
 import os
 from dataclasses import field, dataclass
 from typing import Optional, Any
-import transformers
-from transformers import LlamaForCausalLM, LlamaTokenizer
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from rouge_score import rouge_scorer
 import random
