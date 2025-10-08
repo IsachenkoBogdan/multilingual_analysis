@@ -145,7 +145,7 @@ def plot_lang_distribution(lang_distribution, candidate_langs, candidate_layers)
     plt.title('Layerwise Language Distribution')
     plt.xlabel('Layer')
     plt.ylabel('Language')
-    plt.show()
+    # plt.show()
     plt.savefig('lang_distribution.png')
 
 
