@@ -16,10 +16,12 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
 from ....modeling_outputs import BackboneOutput
@@ -95,10 +97,10 @@ class NatEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -130,11 +132,11 @@ class NatModelOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -167,10 +169,10 @@ class NatImageClassifierOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class NatEmbeddings(nn.Module):
@@ -186,7 +188,7 @@ class NatEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.embed_dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> tuple[torch.Tensor]:
+    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor]:
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
 
@@ -285,7 +287,7 @@ class NatDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
+        return "p={}".format(self.drop_prob)
 
 
 class NeighborhoodAttention(nn.Module):
@@ -319,7 +321,7 @@ class NeighborhoodAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor]:
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -391,7 +393,7 @@ class NeighborhoodAttentionModule(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(hidden_states, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -457,7 +459,7 @@ class NatLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         batch_size, height, width, channels = hidden_states.size()
         shortcut = hidden_states
 
@@ -521,7 +523,7 @@ class NatStage(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor]:
         _, height, width, _ = hidden_states.size()
         for i, layer_module in enumerate(self.layers):
             layer_outputs = layer_module(hidden_states, output_attentions)
@@ -543,7 +545,7 @@ class NatEncoder(nn.Module):
         super().__init__()
         self.num_levels = len(config.depths)
         self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
         self.levels = nn.ModuleList(
             [
                 NatStage(
@@ -565,7 +567,7 @@ class NatEncoder(nn.Module):
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[tuple, NatEncoderOutput]:
+    ) -> Union[Tuple, NatEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -613,7 +615,7 @@ class NatPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: NatConfig
+    config_class = NatConfig
     base_model_prefix = "nat"
     main_input_name = "pixel_values"
 
@@ -707,7 +709,7 @@ class NatModel(NatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, NatModelOutput]:
+    ) -> Union[Tuple, NatModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -786,7 +788,7 @@ class NatForImageClassification(NatPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, NatImageClassifierOutput]:
+    ) -> Union[Tuple, NatImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -808,7 +810,26 @@ class NatForImageClassification(NatPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -927,6 +948,3 @@ class NatBackbone(NatPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
-
-
-__all__ = ["NatForImageClassification", "NatModel", "NatPreTrainedModel", "NatBackbone"]

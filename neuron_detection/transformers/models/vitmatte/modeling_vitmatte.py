@@ -15,50 +15,67 @@
 """PyTorch ViTMatte model."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 from torch import nn
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...utils.backbone_utils import load_backbone
 from .configuration_vitmatte import VitMatteConfig
 
 
+# General docstring
+_CONFIG_FOR_DOC = "VitMatteConfig"
+
+
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of image matting models.
-    """
-)
 class ImageMattingOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Loss.
-    alphas (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-        Estimated alpha values.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
-        (also called feature maps) of the model at the output of each stage.
+    """
+    Class for outputs of image matting models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Loss.
+        alphas (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+           Estimated alpha values.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each stage) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states
+            (also called feature maps) of the model at the output of each stage.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
-    alphas: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    alphas: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@auto_docstring
 class VitMattePreTrainedModel(PreTrainedModel):
-    config: VitMatteConfig
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = VitMatteConfig
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: nn.Module):
-        if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
+    def _init_weights(self, module):
+        if isinstance(module, nn.Conv2d):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -207,10 +224,35 @@ class VitMatteDetailCaptureModule(nn.Module):
         return alphas
 
 
-@auto_docstring(
-    custom_intro="""
-    ViTMatte framework leveraging any vision backbone e.g. for ADE20k, CityScapes.
-    """
+VITMATTE_START_DOCSTRING = r"""
+    Parameters:
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+        config ([`UperNetConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+VITMATTE_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`VitMatteImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
+            `attentions` under returned tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers of the backbone. See `hidden_states` under
+            returned tensors for more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """ViTMatte framework leveraging any vision backbone e.g. for ADE20k, CityScapes.""",
+    VITMATTE_START_DOCSTRING,
 )
 class VitMatteForImageMatting(VitMattePreTrainedModel):
     def __init__(self, config):
@@ -223,7 +265,8 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @add_start_docstrings_to_model_forward(VITMATTE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=ImageMattingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -232,9 +275,11 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ):
-        r"""
+        """
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth image matting for computing the loss.
+
+        Returns:
 
         Examples:
 
@@ -291,6 +336,3 @@ class VitMatteForImageMatting(VitMattePreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-__all__ = ["VitMattePreTrainedModel", "VitMatteForImageMatting"]

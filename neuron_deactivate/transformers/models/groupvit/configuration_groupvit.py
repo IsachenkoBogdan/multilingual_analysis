@@ -14,9 +14,9 @@
 # limitations under the License.
 """GroupViT model configuration"""
 
+import os
 from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -86,7 +86,6 @@ class GroupViTTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "groupvit_text_model"
-    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -122,6 +121,24 @@ class GroupViTTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the text config dict if we are loading from GroupViTConfig
+        if config_dict.get("model_type") == "groupvit":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 
 class GroupViTVisionConfig(PretrainedConfig):
     r"""
@@ -138,11 +155,11 @@ class GroupViTVisionConfig(PretrainedConfig):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
+        depths (`List[int]`, *optional*, defaults to [6, 3, 3]):
             The number of layers in each encoder block.
-        num_group_tokens (`list[int]`, *optional*, defaults to [64, 8, 0]):
+        num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`list[int]`, *optional*, defaults to [64, 8, 8]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -180,7 +197,6 @@ class GroupViTVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "groupvit_vision_model"
-    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -230,6 +246,24 @@ class GroupViTVisionConfig(PretrainedConfig):
         self.assign_eps = assign_eps
         self.assign_mlp_ratio = assign_mlp_ratio
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the vision config dict if we are loading from GroupViTConfig
+        if config_dict.get("model_type") == "groupvit":
+            config_dict = config_dict["vision_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 
 class GroupViTConfig(PretrainedConfig):
     r"""
@@ -258,7 +292,6 @@ class GroupViTConfig(PretrainedConfig):
     """
 
     model_type = "groupvit"
-    sub_configs = {"text_config": GroupViTTextConfig, "vision_config": GroupViTVisionConfig}
 
     def __init__(
         self,
@@ -289,7 +322,7 @@ class GroupViTConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key != "transformers_version":
+                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -321,7 +354,7 @@ class GroupViTConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key != "transformers_version":
+                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -356,6 +389,18 @@ class GroupViTConfig(PretrainedConfig):
         self.initializer_range = 0.02
         self.initializer_factor = 1.0
         self.output_segmentation = False
+
+    @classmethod
+    def from_text_vision_configs(cls, text_config: GroupViTTextConfig, vision_config: GroupViTVisionConfig, **kwargs):
+        r"""
+        Instantiate a [`GroupViTConfig`] (or a derived class) from groupvit text model configuration and groupvit
+        vision model configuration.
+
+        Returns:
+            [`GroupViTConfig`]: An instance of a configuration object
+        """
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
 class GroupViTOnnxConfig(OnnxConfig):
@@ -402,6 +447,3 @@ class GroupViTOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
-
-
-__all__ = ["GroupViTConfig", "GroupViTOnnxConfig", "GroupViTTextConfig", "GroupViTVisionConfig"]

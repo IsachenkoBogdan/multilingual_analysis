@@ -14,13 +14,7 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import TYPE_CHECKING, Optional, Union
-
-from ...utils.import_utils import requires
-
-
-if TYPE_CHECKING:
-    from ...modeling_outputs import DepthEstimatorOutput
+from typing import List, Optional, Union
 
 import numpy as np
 import PIL.Image
@@ -33,23 +27,18 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_torch_available,
-    make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging, requires_backends
-
-
-if is_torch_available():
-    import torch
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision",))
 class GLPNImageProcessor(BaseImageProcessor):
     r"""
     Constructs a GLPN image processor.
@@ -83,6 +72,16 @@ class GLPNImageProcessor(BaseImageProcessor):
         self.size_divisor = size_divisor
         self.resample = resample
         super().__init__(**kwargs)
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def resize(
         self,
@@ -134,10 +133,9 @@ class GLPNImageProcessor(BaseImageProcessor):
         )
         return image
 
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
-        images: Union["PIL.Image.Image", TensorType, list["PIL.Image.Image"], list[TensorType]],
+        images: Union["PIL.Image.Image", TensorType, List["PIL.Image.Image"], List[TensorType]],
         do_resize: Optional[bool] = None,
         size_divisor: Optional[int] = None,
         resample=None,
@@ -145,12 +143,13 @@ class GLPNImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess the given images.
 
         Args:
-            images (`PIL.Image.Image` or `TensorType` or `list[np.ndarray]` or `list[TensorType]`):
+            images (`PIL.Image.Image` or `TensorType` or `List[np.ndarray]` or `List[TensorType]`):
                 Images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
@@ -186,7 +185,9 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
 
-        images = make_flat_list_of_images(images)
+        images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -205,7 +206,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(img) for img in images]
 
-        if do_rescale and is_scaled_image(images[0]):
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -230,47 +231,3 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    def post_process_depth_estimation(
-        self,
-        outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-    ) -> list[dict[str, TensorType]]:
-        """
-        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
-        Only supports PyTorch.
-
-        Args:
-            outputs ([`DepthEstimatorOutput`]):
-                Raw outputs of the model.
-            target_sizes (`TensorType` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
-
-        Returns:
-            `list[dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
-            predictions.
-        """
-        requires_backends(self, "torch")
-
-        predicted_depth = outputs.predicted_depth
-
-        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
-            raise ValueError(
-                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
-            )
-
-        results = []
-        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
-        for depth, target_size in zip(predicted_depth, target_sizes):
-            if target_size is not None:
-                depth = depth[None, None, ...]
-                depth = torch.nn.functional.interpolate(depth, size=target_size, mode="bicubic", align_corners=False)
-                depth = depth.squeeze()
-
-            results.append({"predicted_depth": depth})
-
-        return results
-
-
-__all__ = ["GLPNImageProcessor"]

@@ -14,7 +14,7 @@
 # limitations under the License.
 """T5 model configuration"""
 
-from collections.abc import Mapping
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxSeq2SeqConfigWithPast
@@ -73,12 +73,7 @@ class T5Config(PretrainedConfig):
 
     model_type = "t5"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "hidden_size": "d_model",
-        "num_attention_heads": "num_heads",
-        "num_hidden_layers": "num_layers",
-        "head_dim": "d_kv",
-    }
+    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
@@ -166,6 +161,3 @@ class T5OnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
-
-
-__all__ = ["T5Config", "T5OnnxConfig"]

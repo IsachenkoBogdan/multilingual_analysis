@@ -25,13 +25,13 @@ from ...image_utils import (
     ImageInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.deprecation import deprecate_kwarg
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
@@ -57,7 +57,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_pad: bool = True,
-        size_divisor: int = 8,
+        pad_size: int = 8,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -65,22 +65,17 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
-        pad_size = kwargs.get("pad_size")
-        self.size_divisor = size_divisor if size_divisor is not None else pad_size
-
-    @property
-    def pad_size(self):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        return self.size_divisor
-
-    @pad_size.setter
-    def pad_size(self, value):
-        logger.warning(
-            "`self.pad_size` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead",
-        )
-        self.size_divisor = value
+        self.pad_size = pad_size
+        self._valid_processor_keys = [
+            "images",
+            "do_rescale",
+            "rescale_factor",
+            "do_pad",
+            "pad_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     def pad(
         self,
@@ -123,18 +118,17 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-    @filter_out_non_signature_kwargs()
-    @deprecate_kwarg("pad_size", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
+        pad_size: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -149,12 +143,12 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `True`):
                 Whether to pad the image to make the height and width divisible by `window_size`.
-            size_divisor (`int`, *optional*, defaults to 32):
+            pad_size (`int`, *optional*, defaults to 32):
                 The size of the sliding window for the local attention.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of typ, input_data_format=input_data_format
+                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of typ, input_data_format=input_data_formate
                   `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
@@ -174,9 +168,11 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_pad = do_pad if do_pad is not None else self.do_pad
-        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
+        pad_size = pad_size if pad_size is not None else self.pad_size
 
-        images = make_flat_list_of_images(images)
+        images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -186,12 +182,14 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         validate_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
+            do_pad=do_pad,
+            size_divisibility=pad_size,  # Here the pad function simply requires pad_size.
         )
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if do_rescale and is_scaled_image(images[0]):
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -208,7 +206,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             ]
 
         if do_pad:
-            images = [self.pad(image, size=size_divisor, input_data_format=input_data_format) for image in images]
+            images = [self.pad(image, size=pad_size, input_data_format=input_data_format) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
@@ -216,6 +214,3 @@ class Swin2SRImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-__all__ = ["Swin2SRImageProcessor"]

@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import contextlib
-import io
+import importlib.util
 import os
 import platform
 from argparse import ArgumentParser
@@ -22,15 +20,13 @@ from argparse import ArgumentParser
 import huggingface_hub
 
 from .. import __version__ as version
-from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
+    is_safetensors_available,
     is_tf_available,
     is_torch_available,
-    is_torch_hpu_available,
     is_torch_npu_available,
-    is_torch_xpu_available,
 )
 from . import BaseTransformersCLICommand
 
@@ -59,13 +55,18 @@ class EnvironmentCommand(BaseTransformersCLICommand):
         self._accelerate_config_file = accelerate_config_file
 
     def run(self):
-        import safetensors
+        safetensors_version = "not installed"
+        if is_safetensors_available():
+            import safetensors
 
-        safetensors_version = safetensors.__version__
+            safetensors_version = safetensors.__version__
+        elif importlib.util.find_spec("safetensors") is not None:
+            import safetensors
+
+            safetensors_version = f"{safetensors.__version__} but is ignored because of PyTorch version too old."
 
         accelerate_version = "not installed"
         accelerate_config = accelerate_config_str = "not found"
-
         if is_accelerate_available():
             import accelerate
             from accelerate.commands.config import default_config_file, load_config_from_file
@@ -83,24 +84,12 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
         pt_version = "not installed"
         pt_cuda_available = "NA"
-        pt_accelerator = "NA"
         if is_torch_available():
             import torch
 
             pt_version = torch.__version__
             pt_cuda_available = torch.cuda.is_available()
-            pt_xpu_available = is_torch_xpu_available()
             pt_npu_available = is_torch_npu_available()
-            pt_hpu_available = is_torch_hpu_available()
-
-            if pt_cuda_available:
-                pt_accelerator = "CUDA"
-            elif pt_xpu_available:
-                pt_accelerator = "XPU"
-            elif pt_npu_available:
-                pt_accelerator = "NPU"
-            elif pt_hpu_available:
-                pt_accelerator = "HPU"
 
         tf_version = "not installed"
         tf_cuda_available = "NA"
@@ -114,13 +103,6 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             except AttributeError:
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
-
-        deepspeed_version = "not installed"
-        if is_deepspeed_available():
-            # Redirect command line output to silence deepspeed import output.
-            with contextlib.redirect_stdout(io.StringIO()):
-                import deepspeed
-            deepspeed_version = deepspeed.__version__
 
         flax_version = "not installed"
         jax_version = "not installed"
@@ -144,8 +126,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Safetensors version": f"{safetensors_version}",
             "Accelerate version": f"{accelerate_version}",
             "Accelerate config": f"{accelerate_config_str}",
-            "DeepSpeed version": f"{deepspeed_version}",
-            "PyTorch version (accelerator?)": f"{pt_version} ({pt_accelerator})",
+            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
             "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
             "Jax version": f"{jax_version}",
@@ -156,12 +137,6 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             if pt_cuda_available:
                 info["Using GPU in script?"] = "<fill in>"
                 info["GPU type"] = torch.cuda.get_device_name()
-            elif pt_xpu_available:
-                info["Using XPU in script?"] = "<fill in>"
-                info["XPU type"] = torch.xpu.get_device_name()
-            elif pt_hpu_available:
-                info["Using HPU in script?"] = "<fill in>"
-                info["HPU type"] = torch.hpu.get_device_name()
             elif pt_npu_available:
                 info["Using NPU in script?"] = "<fill in>"
                 info["NPU type"] = torch.npu.get_device_name()

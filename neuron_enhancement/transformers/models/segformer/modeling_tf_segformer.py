@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import math
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -89,7 +90,7 @@ class TFSegformerOverlapPatchEmbeddings(keras.layers.Layer):
         self.num_channels = num_channels
         self.hidden_size = hidden_size
 
-    def call(self, pixel_values: tf.Tensor) -> tuple[tf.Tensor, int, int]:
+    def call(self, pixel_values: tf.Tensor) -> Tuple[tf.Tensor, int, int]:
         embeddings = self.proj(self.padding(pixel_values))
         height = shape_list(embeddings)[1]
         width = shape_list(embeddings)[2]
@@ -114,7 +115,7 @@ class TFSegformerOverlapPatchEmbeddings(keras.layers.Layer):
 
 class TFSegformerEfficientSelfAttention(keras.layers.Layer):
     """SegFormer's efficient self-attention mechanism. Employs the sequence reduction process introduced in the [PvT
-    paper](https://huggingface.co/papers/2102.12122)."""
+    paper](https://arxiv.org/abs/2102.12122)."""
 
     def __init__(
         self,
@@ -168,7 +169,7 @@ class TFSegformerEfficientSelfAttention(keras.layers.Layer):
         width: int,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> tf.Tensor | tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]]:
         batch_size = shape_list(hidden_states)[0]
         num_channels = shape_list(hidden_states)[2]
 
@@ -271,7 +272,7 @@ class TFSegformerAttention(keras.layers.Layer):
 
     def call(
         self, hidden_states: tf.Tensor, height: int, width: int, output_attentions: bool = False
-    ) -> tf.Tensor | tuple[tf.Tensor, tf.Tensor]:
+    ) -> Union[tf.Tensor, Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self(hidden_states, height, width, output_attentions)
 
         attention_output = self.dense_output(self_outputs[0])
@@ -324,8 +325,8 @@ class TFSegformerMixFFN(keras.layers.Layer):
         self,
         config: SegformerConfig,
         in_features: int,
-        hidden_features: int | None = None,
-        out_features: int | None = None,
+        hidden_features: int = None,
+        out_features: int = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -400,7 +401,7 @@ class TFSegformerLayer(keras.layers.Layer):
         width: int,
         output_attentions: bool = False,
         training: bool = False,
-    ) -> tuple:
+    ) -> Tuple:
         self_attention_outputs = self.attention(
             self.layer_norm_1(hidden_states),  # in Segformer, layernorm is applied before self-attention
             height,
@@ -498,11 +499,11 @@ class TFSegformerEncoder(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor,
-        output_attentions: bool | None = False,
-        output_hidden_states: bool | None = False,
-        return_dict: bool | None = True,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
         training: bool = False,
-    ) -> tuple | TFBaseModelOutput:
+    ) -> Union[Tuple, TFBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -579,11 +580,11 @@ class TFSegformerMainLayer(keras.layers.Layer):
     def call(
         self,
         pixel_values: tf.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> tuple | TFBaseModelOutput:
+    ) -> Union[Tuple, TFBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -608,7 +609,7 @@ class TFSegformerMainLayer(keras.layers.Layer):
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
-            hidden_states = tuple(tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1])
+            hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
 
         if not return_dict:
             if tf.greater(len(encoder_outputs[1:]), 0):
@@ -665,7 +666,7 @@ SEGFORMER_START_DOCSTRING = r"""
 SEGFORMER_INPUTS_DOCSTRING = r"""
 
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `list[tf.Tensor]` ``dict[str, tf.Tensor]` or `dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`SegformerImageProcessor.__call__`] for details.
 
@@ -713,11 +714,11 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> tuple | TFBaseModelOutput:
+    ) -> Union[Tuple, TFBaseModelOutput]:
         outputs = self.segformer(
             pixel_values,
             output_attentions=output_attentions,
@@ -766,10 +767,10 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
         self,
         pixel_values: tf.Tensor | None = None,
         labels: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | TFSequenceClassifierOutput:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFSequenceClassifierOutput]:
         outputs = self.segformer(
             pixel_values,
             output_attentions=output_attentions,
@@ -950,10 +951,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         self,
         pixel_values: tf.Tensor,
         labels: tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> tuple | TFSemanticSegmenterOutput:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFSemanticSegmenterOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -1033,12 +1034,3 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         if getattr(self, "decode_head", None) is not None:
             with tf.name_scope(self.decode_head.name):
                 self.decode_head.build(None)
-
-
-__all__ = [
-    "TFSegformerDecodeHead",
-    "TFSegformerForImageClassification",
-    "TFSegformerForSemanticSegmentation",
-    "TFSegformerModel",
-    "TFSegformerPreTrainedModel",
-]

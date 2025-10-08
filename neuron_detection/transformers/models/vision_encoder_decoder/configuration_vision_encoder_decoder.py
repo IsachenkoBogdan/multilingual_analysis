@@ -14,9 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections import OrderedDict
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
 
 from packaging import version
 
@@ -80,14 +78,13 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "vision-encoder-decoder"
-    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
-    has_no_defaults_at_init = True
+    is_composition = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
-                f"A configuration of type {self.model_type} cannot be instantiated because "
+                f"A configuraton of type {self.model_type} cannot be instantiated because "
                 f"not both `encoder` and `decoder` sub-configurations are passed, but only {kwargs}"
             )
 
@@ -210,6 +207,3 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
-
-
-__all__ = ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]

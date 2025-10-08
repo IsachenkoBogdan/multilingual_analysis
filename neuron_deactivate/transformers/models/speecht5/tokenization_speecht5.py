@@ -16,13 +16,12 @@
 
 import os
 from shutil import copyfile
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
-from ...utils.import_utils import requires
 from .number_normalizer import EnglishNumberNormalizer
 
 
@@ -31,7 +30,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spm_char.model"}
 
 
-@requires(backends=("sentencepiece",))
 class SpeechT5Tokenizer(PreTrainedTokenizer):
     """
     Construct a SpeechT5 tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -86,7 +84,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         normalize=False,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -149,7 +147,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text: str) -> list[str]:
+    def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
         return self.sp_model.encode(text, out_type=str)
 
@@ -182,7 +180,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
             return token_ids_0 + [self.eos_token_id]
@@ -190,8 +188,8 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+    ) -> List[int]:
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
@@ -202,7 +200,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             return ([0] * len(token_ids_0)) + suffix_ones
         return ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -218,6 +216,3 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
-
-__all__ = ["SpeechT5Tokenizer"]

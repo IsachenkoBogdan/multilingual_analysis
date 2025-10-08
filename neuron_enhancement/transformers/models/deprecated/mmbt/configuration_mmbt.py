@@ -21,7 +21,7 @@ from ....utils import logging
 logger = logging.get_logger(__name__)
 
 
-class MMBTConfig:
+class MMBTConfig(object):
     """
     This is the configuration class to store the configuration of a [`MMBTModel`]. It is used to instantiate a MMBT
     model according to the specified arguments, defining the model architecture.
@@ -40,6 +40,3 @@ class MMBTConfig:
         self.modal_hidden_size = modal_hidden_size
         if num_labels:
             self.num_labels = num_labels
-
-
-__all__ = ["MMBTConfig"]

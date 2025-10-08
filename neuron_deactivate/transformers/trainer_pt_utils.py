@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,15 +22,13 @@ import io
 import json
 import math
 import os
-import re
 import sys
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from itertools import chain
 from logging import StreamHandler
-from typing import Any, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
@@ -53,11 +52,22 @@ if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
 if is_torch_xla_available():
-    import torch_xla.runtime as xr
+    import torch_xla.core.xla_model as xm
 
 if is_torch_available():
-    from torch.optim.lr_scheduler import LRScheduler
+    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
 
+    if is_torch_greater_or_equal_than_2_0:
+        from torch.optim.lr_scheduler import LRScheduler
+    else:
+        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+
+
+# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+try:
+    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
+except ImportError:
+    SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
 
@@ -122,9 +132,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert type(tensors) is type(new_tensors), (
-            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
-        )
+        assert (
+            type(tensors) == type(new_tensors)
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -149,11 +159,13 @@ def find_batch_size(tensors):
             if result is not None:
                 return result
     elif isinstance(tensors, Mapping):
-        for value in tensors.values():
+        for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
                 return result
-    elif isinstance(tensors, (torch.Tensor, np.ndarray)):
+    elif isinstance(tensors, torch.Tensor):
+        return tensors.shape[0] if len(tensors.shape) >= 1 else None
+    elif isinstance(tensors, np.ndarray):
         return tensors.shape[0] if len(tensors.shape) >= 1 else None
 
 
@@ -179,7 +191,7 @@ def nested_detach(tensors):
         return type(tensors)(nested_detach(t) for t in tensors)
     elif isinstance(tensors, Mapping):
         return type(tensors)({k: nested_detach(t) for k, t in tensors.items()})
-    return tensors.detach() if isinstance(tensors, torch.Tensor) else tensors
+    return tensors.detach()
 
 
 def nested_xla_mesh_reduce(tensors, name):
@@ -219,12 +231,12 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
 
 
 def distributed_broadcast_scalars(
-    scalars: list[Union[int, float]],
+    scalars: List[Union[int, float]],
     num_total_examples: Optional[int] = None,
     device: Optional[torch.device] = torch.device("cuda"),
 ) -> torch.Tensor:
     try:
-        tensorized_scalar = torch.tensor(scalars, device=device)
+        tensorized_scalar = torch.tensor(scalars).to(device)
         output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
         dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
@@ -238,10 +250,10 @@ def distributed_broadcast_scalars(
 
 
 def reissue_pt_warnings(caught_warnings):
-    # Reissue warnings
+    # Reissue warnings that are not the SAVE_STATE_WARNING
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category is not UserWarning:
+            if w.category != UserWarning or w.message != SAVE_STATE_WARNING:
                 warnings.warn(w.message, w.category)
 
 
@@ -270,7 +282,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs (`dict[str, Any]`, *optional*):
+        kwargs (`Dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -290,7 +302,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
 
 class EvalLoopContainer:
     """
-    Container to store intermediate results of evaluation loop.
+    Container to store intermediate results of evaluation loop
 
     Args:
         do_nested_concat (`bool`, *optional*, defaults to `True`):
@@ -380,15 +392,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size, (
-            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
-        )
+        assert (
+            len(indices) == self.total_size
+        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples, (
-            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-        )
+        assert (
+            len(indices) == self.num_samples
+        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
 
         return iter(indices)
 
@@ -397,9 +409,9 @@ class SequentialDistributedSampler(Sampler):
 
 
 def get_tpu_sampler(dataset: torch.utils.data.Dataset, batch_size: int):
-    if xr.world_size() <= 1:
+    if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
-    return DistributedSampler(dataset, num_replicas=xr.world_size(), rank=xr.global_ordinal())
+    return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
 def nested_new_like(arrays, num_samples, padding_index=-100):
@@ -442,7 +454,7 @@ class DistributedTensorGatherer:
         - P1: `[6, 7, 8, 9, 10, 11]`
         - P2: `[12, 13, 14, 15, 0, 1]`
 
-    The first batch treated on each process will be:
+    The first batch treated on each process will be
 
         - P0: `[0, 1]`
         - P1: `[6, 7]`
@@ -505,9 +517,9 @@ class DistributedTensorGatherer:
         if isinstance(arrays, (list, tuple)):
             result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
             return result[0][0], type(arrays)(r[1] for r in result)
-        assert arrays.shape[0] % self.world_size == 0, (
-            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
-        )
+        assert (
+            arrays.shape[0] % self.world_size == 0
+        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
@@ -622,7 +634,7 @@ class LengthGroupedSampler(Sampler):
         self,
         batch_size: int,
         dataset: Optional[Dataset] = None,
-        lengths: Optional[list[int]] = None,
+        lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
         generator=None,
     ):
@@ -632,7 +644,10 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -640,7 +655,7 @@ class LengthGroupedSampler(Sampler):
             lengths = [len(feature[model_input_name]) for feature in dataset]
         elif isinstance(lengths, torch.Tensor):
             logger.info(
-                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
             )
             lengths = lengths.tolist()
 
@@ -670,7 +685,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         rank: Optional[int] = None,
         seed: int = 0,
         drop_last: bool = False,
-        lengths: Optional[list[int]] = None,
+        lengths: Optional[List[int]] = None,
         model_input_name: Optional[str] = None,
     ):
         if dataset is None and lengths is None:
@@ -692,7 +707,10 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+            if (
+                not (isinstance(dataset[0], dict) or isinstance(dataset[0], BatchEncoding))
+                or model_input_name not in dataset[0]
+            ):
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{model_input_name}' key."
@@ -701,7 +719,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
-                " list[int]..."
+                " List[int]..."
             )
             lengths = lengths.tolist()
 
@@ -729,7 +747,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             # add extra samples to make it evenly divisible
             indices += indices[: (self.total_size - len(indices))]
         else:
-            # remove tail of data to make it evenly divisible
+            # remove tail of data to make it evenly divisible.
             indices = indices[: self.total_size]
         assert len(indices) == self.total_size
 
@@ -914,41 +932,40 @@ def _get_learning_rate(self):
             last_lr = self.optimizer.param_groups[0]["lr"]
         else:
             last_lr = self.lr_scheduler.get_last_lr()[0]
-
-    if torch.is_tensor(last_lr):
-        last_lr = last_lr.item()
+        if torch.is_tensor(last_lr):
+            last_lr = last_lr.item()
     return last_lr
 
 
 def _secs2timedelta(secs):
     """
-    Convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimal places.
+    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
     """
 
     msec = int(abs(secs - int(secs)) * 100)
     return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
 
 
-def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
+def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     """
-    Reformat Trainer metrics values to a human-readable format.
+    Reformat Trainer metrics values to a human-readable format
 
     Args:
-        metrics (`dict[str, float]`):
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
 
     Returns:
-        metrics (`dict[str, float]`): The reformatted metrics
+        metrics (`Dict[str, float]`): The reformatted metrics
     """
 
     metrics_copy = metrics.copy()
     for k, v in metrics_copy.items():
         if "_mem_" in k:
-            metrics_copy[k] = f"{v >> 20}MB"
+            metrics_copy[k] = f"{ v >> 20 }MB"
         elif "_runtime" in k:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
-            metrics_copy[k] = f"{int(v) >> 30}GF"
+            metrics_copy[k] = f"{ int(v) >> 30 }GF"
         elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
@@ -957,21 +974,21 @@ def metrics_format(metrics: dict[str, float]) -> dict[str, float]:
 
 def log_metrics(self, split, metrics):
     """
-    Log metrics in a specially formatted way.
+    Log metrics in a specially formatted way
 
     Under distributed environment this is done only for a process with rank 0.
 
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`
-        metrics (`dict[str, float]`):
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
 
     Notes on memory reports:
 
     In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include:
+    Now when this method is run, you will see a report that will include: :
 
     ```
     init_mem_cpu_alloc_delta   =     1301MB
@@ -1000,7 +1017,7 @@ def log_metrics(self, split, metrics):
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
     main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
     use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
-    memory than the rest since it stores the gradient and optimizer states for all participating GPUs. Perhaps in the
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
     future these reports will evolve to measure those too.
 
     The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
@@ -1038,8 +1055,8 @@ def log_metrics(self, split, metrics):
         return
 
     print(f"***** {split} metrics *****")
-    metrics_formatted = metrics_format(metrics)
-    k_width = max(len(str(x)) for x in metrics_formatted)
+    metrics_formatted = self.metrics_format(metrics)
+    k_width = max(len(str(x)) for x in metrics_formatted.keys())
     v_width = max(len(str(x)) for x in metrics_formatted.values())
     for key in sorted(metrics_formatted.keys()):
         print(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
@@ -1054,7 +1071,7 @@ def save_metrics(self, split, metrics, combined=True):
     Args:
         split (`str`):
             Mode/split name: one of `train`, `eval`, `test`, `all`
-        metrics (`dict[str, float]`):
+        metrics (`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (`bool`, *optional*, defaults to `True`):
             Creates combined metrics by updating `all_results.json` with metrics of this call
@@ -1073,7 +1090,7 @@ def save_metrics(self, split, metrics, combined=True):
     if combined:
         path = os.path.join(self.args.output_dir, "all_results.json")
         if os.path.exists(path):
-            with open(path) as f:
+            with open(path, "r") as f:
                 all_metrics = json.load(f)
         else:
             all_metrics = {}
@@ -1085,7 +1102,7 @@ def save_metrics(self, split, metrics, combined=True):
 
 def save_state(self):
     """
-    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model.
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
 
     Under distributed environment this is done only for a process with rank 0.
     """
@@ -1098,7 +1115,7 @@ def save_state(self):
 
 def get_model_param_count(model, trainable_only=False):
     """
-    Calculate model's total param count. If trainable_only is True then count only those requiring grads.
+    Calculate model's total param count. If trainable_only is True then count only those requiring grads
     """
     if is_deepspeed_zero3_enabled():
 
@@ -1113,27 +1130,19 @@ def get_model_param_count(model, trainable_only=False):
     return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
-def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None):
+def get_parameter_names(model, forbidden_layer_types):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
-    forbidden_layer_patterns = (
-        [re.compile(pattern) for pattern in forbidden_layer_names] if forbidden_layer_names is not None else []
-    )
     result = []
     for name, child in model.named_children():
-        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
         result += [
             f"{name}.{n}"
-            for n in child_params
+            for n in get_parameter_names(child, forbidden_layer_types)
             if not isinstance(child, tuple(forbidden_layer_types))
-            and not any(pattern.search(f"{name}.{n}".lower()) for pattern in forbidden_layer_patterns)
         ]
-    # Add model specific parameters that are not in any child
-    result += [
-        k for k in model._parameters if not any(pattern.search(k.lower()) for pattern in forbidden_layer_patterns)
-    ]
-
+    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
+    result += list(model._parameters.keys())
     return result
 
 
@@ -1200,7 +1209,7 @@ if is_sagemaker_mp_enabled():
             return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
-        return tensor.detach().concat().cpu()
+        return tensor.concat().detach().cpu()
 
 
 @dataclass
@@ -1226,8 +1235,8 @@ class AcceleratorConfig:
             all workers.
         use_seedable_sampler (`bool`, *optional*, defaults to `True`):
             Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`]). Ensures
-            training results are fully reproducible using a different sampling technique. While seed-to-seed results
-            may differ, on average the differences are negligible when using multiple different seeds to compare. Should
+            training results are fully reproducable using a different sampling technique. While seed-to-seed results
+            may differ, on average the differences are neglible when using multiple different seeds to compare. Should
             also be ran with [`~utils.set_seed`] for the best results.
         gradient_accumulation_kwargs (`dict`, *optional*):
             Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`].
@@ -1259,7 +1268,7 @@ class AcceleratorConfig:
             " in your script multiplied by the number of processes."
         },
     )
-    dispatch_batches: Optional[bool] = field(
+    dispatch_batches: bool = field(
         default=None,
         metadata={
             "help": "If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
@@ -1279,13 +1288,13 @@ class AcceleratorConfig:
         default=True,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
-            "Ensures training results are fully reproducible using a different sampling technique. "
-            "While seed-to-seed results may differ, on average the differences are negligible when using"
+            "Ensures training results are fully reproducable using a different sampling technique. "
+            "While seed-to-seed results may differ, on average the differences are neglible when using"
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
 
-    non_blocking: bool = field(
+    non_blocking: Optional[bool] = field(
         default=False,
         metadata={
             "help": "Whether to use non-blocking CUDA calls to help minimize synchronization during "
@@ -1295,7 +1304,7 @@ class AcceleratorConfig:
         },
     )
 
-    gradient_accumulation_kwargs: Optional[dict] = field(
+    gradient_accumulation_kwargs: Optional[Dict] = field(
         default=None,
         metadata={
             "help": "Additional kwargs to configure gradient accumulation, see [`accelerate.utils.GradientAccumulationPlugin`]. "
@@ -1323,7 +1332,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        extra_keys = sorted(key for key in config_dict if key not in cls.__dataclass_fields__)
+        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
@@ -1349,7 +1358,7 @@ class LayerWiseDummyOptimizer(torch.optim.Optimizer):
     https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
     """
 
-    def __init__(self, optimizer_dict=None, **kwargs):
+    def __init__(self, optimizer_dict=None, *args, **kwargs):
         dummy_tensor = torch.randn(1, 1)
         self.optimizer_dict = optimizer_dict
         super().__init__([dummy_tensor], {"lr": kwargs.get("lr", 1e-03)})
@@ -1370,37 +1379,13 @@ class LayerWiseDummyScheduler(LRScheduler):
     """
 
     def __init__(self, *args, **kwargs):
-        self.default_lr = kwargs["lr"]
-        optimizer = LayerWiseDummyOptimizer(**kwargs)
+        optimizer = LayerWiseDummyOptimizer()
         last_epoch = -1
-        super().__init__(optimizer, last_epoch)
+        verbose = False
+        super().__init__(optimizer, last_epoch, verbose)
 
     def get_lr(self):
-        # default value
-        lrs = [self.default_lr]
-
-        # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
-        if self.optimizer is not None:
-            param_wise_lrs = [
-                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
-            ]
-            lrs = list(chain(*param_wise_lrs))
-
-        return lrs
+        return [group["lr"] for group in self.optimizer.param_groups]
 
     def _get_closed_form_lr(self):
         return self.base_lrs
-
-
-def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
-    """Helper to set RNG state for a specific device type (CUDA, NPU, MLU, MUSA)"""
-    device_state_key = device_name.lower()
-    err_template = "Didn't manage to set back the RNG states of the {backend} because of the following error:\n {exception}\nThis won't yield the same results as if the training had not been interrupted."
-    try:
-        if is_distributed:
-            device_module.random.set_rng_state_all(checkpoint_rng_state[device_state_key])
-        else:
-            device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
-    except Exception as e:
-        # Log error if setting RNG state fails
-        logger.error(err_template.format(backend=device_name, exception=e))

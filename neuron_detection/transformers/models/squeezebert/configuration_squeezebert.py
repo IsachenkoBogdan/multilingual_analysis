@@ -15,7 +15,7 @@
 """SqueezeBERT model configuration"""
 
 from collections import OrderedDict
-from collections.abc import Mapping
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
@@ -162,6 +162,3 @@ class SqueezeBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
-
-
-__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]

@@ -14,6 +14,9 @@
 # limitations under the License.
 """CLIPSeg model configuration"""
 
+import os
+from typing import Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -81,7 +84,6 @@ class CLIPSegTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "clipseg_text_model"
-    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -114,6 +116,24 @@ class CLIPSegTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the text config dict if we are loading from CLIPSegConfig
+        if config_dict.get("model_type") == "clipseg":
+            config_dict = config_dict["text_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
 
 
 class CLIPSegVisionConfig(PretrainedConfig):
@@ -170,7 +190,6 @@ class CLIPSegVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "clipseg_vision_model"
-    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -203,6 +222,24 @@ class CLIPSegVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        # get the vision config dict if we are loading from CLIPSegConfig
+        if config_dict.get("model_type") == "clipseg":
+            config_dict = config_dict["vision_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 
 class CLIPSegConfig(PretrainedConfig):
     r"""
@@ -223,7 +260,7 @@ class CLIPSegConfig(PretrainedConfig):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The initial value of the *logit_scale* parameter. Default is used as per the original CLIPSeg implementation.
-        extract_layers (`list[int]`, *optional*, defaults to `[3, 6, 9]`):
+        extract_layers (`List[int]`, *optional*, defaults to `[3, 6, 9]`):
             Layers to extract when forwarding the query image through the frozen visual backbone of CLIP.
         reduce_dim (`int`, *optional*, defaults to 64):
             Dimensionality to reduce the CLIP vision embedding.
@@ -269,7 +306,6 @@ class CLIPSegConfig(PretrainedConfig):
     ```"""
 
     model_type = "clipseg"
-    sub_configs = {"text_config": CLIPSegTextConfig, "vision_config": CLIPSegVisionConfig}
 
     def __init__(
         self,
@@ -307,7 +343,7 @@ class CLIPSegConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key != "transformers_version":
+                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -339,7 +375,7 @@ class CLIPSegConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key != "transformers_version":
+                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -380,5 +416,14 @@ class CLIPSegConfig(PretrainedConfig):
         self.initializer_factor = 1.0
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
 
+    @classmethod
+    def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):
+        r"""
+        Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision
+        model configuration.
 
-__all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]
+        Returns:
+            [`CLIPSegConfig`]: An instance of a configuration object
+        """
+
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)

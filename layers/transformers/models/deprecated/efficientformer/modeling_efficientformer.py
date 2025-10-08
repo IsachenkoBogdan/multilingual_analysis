@@ -16,10 +16,12 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
 from ....modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
@@ -115,7 +117,7 @@ class EfficientFormerSelfAttention(nn.Module):
         else:
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         batch_size, sequence_length, num_channels = hidden_states.shape
         qkv = self.qkv(hidden_states)
         query_layer, key_layer, value_layer = qkv.reshape(batch_size, sequence_length, self.num_heads, -1).split(
@@ -268,14 +270,14 @@ class EfficientFormerDropPath(nn.Module):
         return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
+        return "p={}".format(self.drop_prob)
 
 
 class EfficientFormerFlat(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
         return hidden_states
 
@@ -301,10 +303,10 @@ class EfficientFormerMeta3D(nn.Module):
         self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         self_attention_outputs = self.token_mixer(self.layernorm1(hidden_states), output_attentions)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -336,7 +338,7 @@ class EfficientFormerMeta3DLayers(nn.Module):
             [EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths]
         )
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
 
         for layer_module in self.blocks:
@@ -368,10 +370,10 @@ class EfficientFormerMeta4D(nn.Module):
         self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones(dim), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         outputs = self.token_mixer(hidden_states)
 
         if self.use_layer_scale:
@@ -404,7 +406,7 @@ class EfficientFormerMeta4DLayers(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         for layer_module in self.blocks:
             hidden_states = layer_module(hidden_states)
         return hidden_states
@@ -415,7 +417,7 @@ class EfficientFormerIntermediateStage(nn.Module):
         super().__init__()
         self.meta4D_layers = EfficientFormerMeta4DLayers(config, index)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states)
         return hidden_states
 
@@ -427,7 +429,7 @@ class EfficientFormerLastStage(nn.Module):
         self.flat = EfficientFormerFlat()
         self.meta3D_layers = EfficientFormerMeta3DLayers(config)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> tuple[torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states)
         hidden_states = self.flat(hidden_states)
         hidden_states = self.meta3D_layers(hidden_states, output_attentions)
@@ -498,7 +500,7 @@ class EfficientFormerPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: EfficientFormerConfig
+    config_class = EfficientFormerConfig
     base_model_prefix = "efficientformer"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
@@ -658,7 +660,26 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -696,11 +717,11 @@ class EfficientFormerForImageClassificationWithTeacherOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    cls_logits: Optional[torch.FloatTensor] = None
-    distillation_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: torch.FloatTensor = None
+    cls_logits: torch.FloatTensor = None
+    distillation_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @add_start_docstrings(
@@ -776,11 +797,3 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-__all__ = [
-    "EfficientFormerForImageClassification",
-    "EfficientFormerForImageClassificationWithTeacher",
-    "EfficientFormerModel",
-    "EfficientFormerPreTrainedModel",
-]

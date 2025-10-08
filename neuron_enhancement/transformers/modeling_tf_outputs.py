@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import tensorflow as tf
 
@@ -43,9 +44,9 @@ class TFBaseModelOutput(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -63,8 +64,8 @@ class TFBaseModelOutputWithNoAttention(ModelOutput):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
 
 
 @dataclass
@@ -95,10 +96,10 @@ class TFBaseModelOutputWithPooling(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    pooler_output: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    pooler_output: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -118,9 +119,9 @@ class TFBaseModelOutputWithPoolingAndNoAttention(ModelOutput):
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    pooler_output: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor, ...] | None = None
+    last_hidden_state: tf.Tensor = None
+    pooler_output: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
 
 
 @dataclass
@@ -138,7 +139,7 @@ class TFBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
 
             This output is usually *not* a good summary of the semantic content of the input, you're often better with
             averaging or pooling the sequence of hidden-states for the whole input sequence.
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -163,12 +164,12 @@ class TFBaseModelOutputWithPoolingAndCrossAttentions(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    pooler_output: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    pooler_output: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -182,7 +183,7 @@ class TFBaseModelOutputWithPast(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -201,10 +202,10 @@ class TFBaseModelOutputWithPast(ModelOutput):
             heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -234,10 +235,10 @@ class TFBaseModelOutputWithCrossAttentions(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -251,7 +252,7 @@ class TFBaseModelOutputWithPastAndCrossAttentions(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -276,11 +277,11 @@ class TFBaseModelOutputWithPastAndCrossAttentions(ModelOutput):
             weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -295,7 +296,7 @@ class TFSeq2SeqModelOutput(ModelOutput):
 
             If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
             hidden_size)` is output.
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -333,14 +334,14 @@ class TFSeq2SeqModelOutput(ModelOutput):
             self-attention heads.
     """
 
-    last_hidden_state: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    decoder_hidden_states: tuple[tf.Tensor] | None = None
-    decoder_attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    last_hidden_state: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: tuple[tf.Tensor] | None = None
-    encoder_attentions: tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -367,9 +368,9 @@ class TFCausalLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -382,7 +383,7 @@ class TFCausalLMOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -402,10 +403,10 @@ class TFCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -435,7 +436,7 @@ class TFCausalLMOutputWithCrossAttentions(ModelOutput):
 
             Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
             weighted average in the cross-attention heads.
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -444,11 +445,11 @@ class TFCausalLMOutputWithCrossAttentions(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -475,9 +476,9 @@ class TFMaskedLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -490,7 +491,7 @@ class TFSeq2SeqLMOutput(ModelOutput):
             Language modeling loss.
         logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -529,14 +530,14 @@ class TFSeq2SeqLMOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    decoder_hidden_states: tuple[tf.Tensor] | None = None
-    decoder_attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: tuple[tf.Tensor] | None = None
-    encoder_attentions: tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -564,9 +565,9 @@ class TFNextSentencePredictorOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -593,9 +594,9 @@ class TFSequenceClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -608,7 +609,7 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -644,14 +645,14 @@ class TFSeq2SeqSequenceClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    decoder_hidden_states: tuple[tf.Tensor] | None = None
-    decoder_attentions: tuple[tf.Tensor] | None = None
-    cross_attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
+    cross_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: tuple[tf.Tensor] | None = None
-    encoder_attentions: tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -686,9 +687,9 @@ class TFSemanticSegmenterOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -718,8 +719,8 @@ class TFSemanticSegmenterOutputWithNoAttention(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -744,9 +745,9 @@ class TFImageClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -775,9 +776,9 @@ class TFMultipleChoiceModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -804,9 +805,9 @@ class TFTokenClassifierOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -835,10 +836,10 @@ class TFQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    start_logits: tf.Tensor | None = None
-    end_logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    start_logits: tf.Tensor = None
+    end_logits: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -853,7 +854,7 @@ class TFSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
             Span-start scores (before SoftMax).
         end_logits (`tf.Tensor` of shape `(batch_size, sequence_length)`):
             Span-end scores (before SoftMax).
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -886,14 +887,14 @@ class TFSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    start_logits: tf.Tensor | None = None
-    end_logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    decoder_hidden_states: tuple[tf.Tensor] | None = None
-    decoder_attentions: tuple[tf.Tensor] | None = None
+    start_logits: tf.Tensor = None
+    end_logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor] | None = None
+    decoder_attentions: Tuple[tf.Tensor] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: tuple[tf.Tensor] | None = None
-    encoder_attentions: tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor] | None = None
+    encoder_attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -906,7 +907,7 @@ class TFSequenceClassifierOutputWithPast(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         logits (`tf.Tensor` of shape `(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        past_key_values (`list[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        past_key_values (`List[tf.Tensor]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             List of `tf.Tensor` of length `config.n_layers`, with each tensor of shape `(2, batch_size, num_heads,
             sequence_length, embed_size_per_head)`).
 
@@ -926,10 +927,10 @@ class TFSequenceClassifierOutputWithPast(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    past_key_values: list[tf.Tensor] | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    logits: tf.Tensor = None
+    past_key_values: List[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 @dataclass
@@ -949,8 +950,8 @@ class TFImageClassifierOutputWithNoAttention(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    logits: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor, ...] | None = None
+    logits: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor, ...]] = None
 
 
 @dataclass
@@ -976,9 +977,9 @@ class TFMaskedImageModelingOutput(ModelOutput):
     """
 
     loss: tf.Tensor | None = None
-    reconstruction: tf.Tensor | None = None
-    hidden_states: tuple[tf.Tensor] | None = None
-    attentions: tuple[tf.Tensor] | None = None
+    reconstruction: tf.Tensor = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
     @property
     def logits(self):

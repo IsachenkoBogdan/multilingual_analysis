@@ -82,5 +82,8 @@ class TvltProcessor(ProcessorMixin):
             output_dict.update(images_mixed_dict)
         return output_dict
 
-
-__all__ = ["TvltProcessor"]
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(image_processor_input_names + feature_extractor_input_names))

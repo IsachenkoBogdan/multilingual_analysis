@@ -69,9 +69,9 @@ class EsmConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
             Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query", "rotary"`.
             For positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -87,14 +87,11 @@ class EsmConfig(PretrainedConfig):
     ```python
     >>> from transformers import EsmModel, EsmConfig
 
-    >>> # Initializing a ESM facebook/esm-1b style configuration
-    >>> configuration = EsmConfig(vocab_size=33)
+    >>> # Initializing a ESM facebook/esm-1b style configuration >>> configuration = EsmConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = EsmModel(configuration)
+    >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
 
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> # Accessing the model configuration >>> configuration = model.config
     ```"""
 
     model_type = "esm"
@@ -162,7 +159,7 @@ class EsmConfig(PretrainedConfig):
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = super().to_dict()
         if isinstance(self.esmfold_config, EsmFoldConfig):
@@ -172,7 +169,7 @@ class EsmConfig(PretrainedConfig):
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: Optional[str] = None
+    esm_type: str = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False
@@ -196,7 +193,7 @@ class EsmFoldConfig:
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = asdict(self)
         output["trunk"] = self.trunk.to_dict()
@@ -261,7 +258,7 @@ class TrunkConfig:
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
         Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
         """
         output = asdict(self)
         output["structure_module"] = self.structure_module.to_dict()
@@ -360,6 +357,3 @@ def get_default_vocab_list():
         "<null_1>",
         "<mask>",
     )
-
-
-__all__ = ["EsmConfig"]

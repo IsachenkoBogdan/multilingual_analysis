@@ -15,8 +15,7 @@
 """GPT Neo model configuration"""
 
 from collections import OrderedDict
-from collections.abc import Mapping
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from ... import PreTrainedTokenizer, TensorType, is_torch_available
 from ...configuration_utils import PretrainedConfig
@@ -268,6 +267,3 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     @property
     def default_onnx_opset(self) -> int:
         return 13
-
-
-__all__ = ["GPTNeoConfig", "GPTNeoOnnxConfig"]

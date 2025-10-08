@@ -17,17 +17,15 @@
 import json
 import os
 import re
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import is_phonemizer_available, is_uroman_available, logging
+from ...utils import is_phonemizer_available, logging
 
 
 if is_phonemizer_available():
     import phonemizer
 
-if is_uroman_available():
-    import uroman as ur
 
 logger = logging.get_logger(__name__)
 
@@ -141,7 +139,7 @@ class VitsTokenizer(PreTrainedTokenizer):
 
     def prepare_for_tokenization(
         self, text: str, is_split_into_words: bool = False, normalize: Optional[bool] = None, **kwargs
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
 
@@ -159,11 +157,11 @@ class VitsTokenizer(PreTrainedTokenizer):
                 Whether or not to apply punctuation and casing normalization to the text inputs. Typically, VITS is
                 trained on lower-cased and un-punctuated text. Hence, normalization is used to ensure that the input
                 text consists only of lower-case characters.
-            kwargs (`dict[str, Any]`, *optional*):
+            kwargs (`Dict[str, Any]`, *optional*):
                 Keyword arguments to use for the tokenization.
 
         Returns:
-            `tuple[str, dict[str, Any]]`: The prepared text and the unused kwargs.
+            `Tuple[str, Dict[str, Any]]`: The prepared text and the unused kwargs.
         """
         normalize = normalize if normalize is not None else self.normalize
 
@@ -174,16 +172,11 @@ class VitsTokenizer(PreTrainedTokenizer):
         filtered_text = self._preprocess_char(text)
 
         if has_non_roman_characters(filtered_text) and self.is_uroman:
-            if not is_uroman_available():
-                logger.warning(
-                    "Text to the tokenizer contains non-Roman characters. To apply the `uroman` pre-processing "
-                    "step automatically, ensure the `uroman` Romanizer is installed with: `pip install uroman` "
-                    "Note `uroman` requires python version >= 3.10"
-                    "Otherwise, apply the Romanizer manually as per the instructions: https://github.com/isi-nlp/uroman"
-                )
-            else:
-                uroman = ur.Uroman()
-                filtered_text = uroman.romanize_string(filtered_text)
+            logger.warning(
+                "Text to the tokenizer contains non-Roman characters. Ensure the `uroman` Romanizer is "
+                "applied to the text prior to passing it to the tokenizer. See "
+                "`https://github.com/isi-nlp/uroman` for details."
+            )
 
         if self.phonemize:
             if not is_phonemizer_available():
@@ -204,7 +197,7 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         return filtered_text, kwargs
 
-    def _tokenize(self, text: str) -> list[str]:
+    def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string by inserting the `<pad>` token at the boundary between adjacent characters."""
         tokens = list(text)
 
@@ -215,7 +208,7 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         return tokens
 
-    def convert_tokens_to_string(self, tokens: list[str]) -> str:
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
         if self.add_blank and len(tokens) > 1:
             tokens = tokens[1::2]
         return "".join(tokens)
@@ -228,7 +221,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Union[tuple[str], None]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Union[Tuple[str], None]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -241,6 +234,3 @@ class VitsTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
-
-
-__all__ = ["VitsTokenizer"]

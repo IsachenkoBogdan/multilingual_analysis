@@ -17,7 +17,7 @@ Feature extractor class for Musicgen Melody
 """
 
 import copy
-from typing import Any, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
@@ -25,7 +25,6 @@ from ...audio_utils import chroma_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, is_torch_available, is_torchaudio_available, logging
-from ...utils.import_utils import requires
 
 
 if is_torch_available():
@@ -37,7 +36,6 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("torchaudio",))
 class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a MusicgenMelody feature extractor.
@@ -54,7 +52,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate (`int`, *optional*, defaults to 32000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
         hop_length (`int`, *optional*, defaults to 4096):
-            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, *optional*, defaults to 30):
             The maximum number of chunks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
@@ -75,7 +73,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             bugs.
 
             </Tip>
-        stem_indices (`list[int]`, *optional*, defaults to `[3, 2]`):
+        stem_indices (`List[int]`, *optional*, defaults to `[3, 2]`):
             Stem channels to extract if demucs outputs are passed.
     """
 
@@ -182,7 +180,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -196,7 +194,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            audio (`torch.Tensor`, `np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[torch.Tensor]`, `list[list[float]]`):
+            audio (`torch.Tensor`, `np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[torch.Tensor]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a torch tensor, a numpy array, a list of float
                 values, a list of numpy arrays, a list of torch tensors, or a list of list of float values.
                 If `audio` is the output of Demucs, it has to be a torch tensor of shape `(batch_size, num_stems, channel_size, audio_length)`.
@@ -244,7 +242,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         if sampling_rate is None:
             logger.warning_once(
-                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
+                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
@@ -315,10 +313,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
-            `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
         output["feature_extractor_type"] = self.__class__.__name__
@@ -331,6 +329,3 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if "spectrogram" in output:
             del output["spectrogram"]
         return output
-
-
-__all__ = ["MusicgenMelodyFeatureExtractor"]

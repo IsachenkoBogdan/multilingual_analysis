@@ -14,11 +14,10 @@
 
 import warnings
 from dataclasses import dataclass, field
-from functools import cached_property
-from typing import Optional
+from typing import Optional, Tuple
 
 from .training_args import TrainingArguments
-from .utils import is_tf_available, logging, requires_backends
+from .utils import cached_property, is_tf_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -115,7 +114,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to log and evaluate the first `global_step` or not.
         logging_steps (`int`, *optional*, defaults to 500):
             Number of update steps between two logs if `logging_strategy="steps"`.
-        save_strategy (`str` or [`~trainer_utils.SaveStrategy`], *optional*, defaults to `"steps"`):
+        save_strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
             The checkpoint save strategy to adopt during training. Possible values are:
 
                 - `"no"`: No save is done during training.
@@ -161,7 +160,7 @@ class TFTrainingArguments(TrainingArguments):
             Google Cloud Project name for the Cloud TPU-enabled project. If not specified, we will attempt to
             automatically detect from metadata.
         run_name (`str`, *optional*):
-            A descriptor for the run. Notably used for trackio, wandb, mlflow, comet and swanlab logging.
+            A descriptor for the run. Notably used for wandb logging.
         xla (`bool`, *optional*):
             Whether to activate the XLA compilation or not.
     """
@@ -190,7 +189,7 @@ class TFTrainingArguments(TrainingArguments):
     xla: bool = field(default=False, metadata={"help": "Whether to activate the XLA compilation or not"})
 
     @cached_property
-    def _setup_strategy(self) -> tuple["tf.distribute.Strategy", int]:
+    def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         requires_backends(self, ["tf"])
         logger.info("Tensorflow: setting up strategy")
 

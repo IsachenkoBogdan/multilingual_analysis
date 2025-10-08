@@ -18,9 +18,9 @@ and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
-from typing import Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, processors
 
 from ...tokenization_utils_base import (
     BatchEncoding,
@@ -101,11 +101,11 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
-        cls_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        cls_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [CLS] token.
-        sep_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        sep_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [SEP] token.
-        pad_token_box (`list[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
+        pad_token_box (`List[int]`, *optional*, defaults to `[0, 0, 0, 0]`):
             The bounding box to use for the special [PAD] token.
         pad_token_label (`int`, *optional*, defaults to -100):
             The label to use for padding tokens. Defaults to -100, which is the `ignore_index` of PyTorch's
@@ -162,6 +162,14 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
+            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+            pre_tok_state["add_prefix_space"] = add_prefix_space
+            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+
+        self.add_prefix_space = add_prefix_space
+
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
         if tokenizer_component_instance:
@@ -199,17 +207,16 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.__call__
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
-        boxes: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
-        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        boxes: Union[List[List[int]], List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -313,7 +320,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
-                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -336,7 +342,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
-                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -353,20 +358,19 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     def batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
         ],
-        is_pair: Optional[bool] = None,
-        boxes: Optional[list[list[list[int]]]] = None,
-        word_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        is_pair: bool = None,
+        boxes: Optional[List[List[List[int]]]] = None,
+        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -398,7 +402,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -411,7 +414,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         )
 
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.tokenize
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
@@ -425,15 +428,14 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[list[list[int]]] = None,
-        word_labels: Optional[list[int]] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -477,7 +479,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -492,20 +493,19 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     def _batch_encode_plus(
         self,
         batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
         ],
-        is_pair: Optional[bool] = None,
-        boxes: Optional[list[list[list[int]]]] = None,
-        word_labels: Optional[list[list[int]]] = None,
+        is_pair: bool = None,
+        boxes: Optional[List[List[List[int]]]] = None,
+        word_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -525,7 +525,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
         )
 
         if is_pair:
@@ -538,9 +537,9 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: tuple[
-        #                       list[dict[str, list[list[int]]]] or list[dict[str, 2D-Tensor]],
-        #                       list[EncodingFast]
+        # `Tokens` has type: Tuple[
+        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
+        #                       List[EncodingFast]
         #                    ]
         # with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
@@ -566,7 +565,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         # To match each overflowing sample with the original sample in the batch
         # we add an overflow_to_sample_mapping array (see below)
         sanitized_tokens = {}
-        for key in tokens_and_encodings[0][0]:
+        for key in tokens_and_encodings[0][0].keys():
             stack = [e for item, _ in tokens_and_encodings for e in item[key]]
             sanitized_tokens[key] = stack
         sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
@@ -657,15 +656,14 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self,
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
-        boxes: Optional[list[list[int]]] = None,
-        word_labels: Optional[list[int]] = None,
+        boxes: Optional[List[List[int]]] = None,
+        word_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -694,7 +692,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
-            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -724,11 +721,10 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._pad
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
+        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -751,9 +747,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta).
-            padding_side:
-                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
-                Default value is picked from the class attribute of the same name.
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -777,8 +770,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
-            if padding_side == "right":
+            if self.padding_side == "right":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
@@ -792,7 +784,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif padding_side == "left":
+            elif self.padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
@@ -807,12 +799,12 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
-                raise ValueError("Invalid padding strategy:" + str(padding_side))
+                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
 
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
@@ -824,18 +816,18 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
         """
         Args:
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not:
         make use of token type ids, therefore a list of zeros is returned.
-            token_ids_0 (`list[int]`):
+            token_ids_0 (`List[int]`):
                 List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
+            token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
         Returns:
-            `list[int]`: List of zeros.
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -843,6 +835,3 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
-
-__all__ = ["LayoutLMv3TokenizerFast"]

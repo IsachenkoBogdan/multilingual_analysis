@@ -21,7 +21,7 @@
 
 import math
 import warnings
-from typing import Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -284,12 +284,12 @@ class TFMistralAttention(keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_value: Optional[tuple[tf.Tensor]] = None,
+        past_key_value: Optional[Tuple[tf.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         training=None,
         **kwargs,
-    ) -> tuple[tf.Tensor, Optional[tf.Tensor], Optional[tuple[tf.Tensor]]]:
+    ) -> Tuple[tf.Tensor, Optional[tf.Tensor], Optional[Tuple[tf.Tensor]]]:
         if "padding_mask" in kwargs:
             warnings.warn(
                 "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
@@ -326,7 +326,7 @@ class TFMistralAttention(keras.layers.Layer):
         )
 
         if past_key_value is not None:
-            # reuse k, v, self_attention
+            # resue k, v, self_attention
             key_states = tf.concat([past_key_value[0], key_states], axis=2)
             value_states = tf.concat([past_key_value[1], value_states], axis=2)
 
@@ -396,11 +396,11 @@ class TFMistralDecoderLayer(keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_value: Optional[tuple[tf.Tensor]] = None,
+        past_key_value: Optional[Tuple[tf.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
-    ) -> tuple[tf.Tensor, Optional[tuple[tf.Tensor, tf.Tensor]]]:
+    ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
             hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -499,6 +499,12 @@ class TFMistralMainLayer(keras.layers.Layer):
         self.norm = TFMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="norm")
         self.config = config
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -522,16 +528,16 @@ class TFMistralMainLayer(keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[list[tf.Tensor]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, TFBaseModelOutputWithPast]:
+    ) -> Union[Tuple, TFBaseModelOutputWithPast]:
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -707,7 +713,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             `past_key_values`).
 
             If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
             information on the default strategy.
 
             - 1 indicates the head is **not masked**,
@@ -722,7 +728,8 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            One formats is allowed:
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
             - Tuple of `tuple(tf.Tensor)` of length `config.n_layers`, with each tuple having 2 tensors of
             shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
             cache format.
@@ -764,16 +771,16 @@ class TFMistralModel(TFMistralPreTrainedModel):
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[list[tf.Tensor]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, TFBaseModelOutputWithPast]:
+    ) -> Union[Tuple, TFBaseModelOutputWithPast]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -809,26 +816,45 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         )
         self.config = config
 
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[list[tf.Tensor]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         labels: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, TFCausalLMOutputWithPast]:
+    ) -> Union[Tuple, TFCausalLMOutputWithPast]:
         r"""
-        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
-            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        Args:
+            labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+                or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
@@ -874,7 +900,7 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         if past_key_values:
             input_ids = tf.expand_dims(input_ids[:, -1], -1)
 
-        position_ids = kwargs.get("position_ids")
+        position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             position_ids = tf.math.cumsum(attention_mask, axis=-1, exclusive=True)
             if past_key_values:
@@ -928,26 +954,33 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         )
         self.config = config
 
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
-        past_key_values: Optional[list[tf.Tensor]] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         labels: Optional[tf.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, TFSequenceClassifierOutputWithPast]:
+    ) -> Union[Tuple, TFSequenceClassifierOutputWithPast]:
         r"""
-        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        Args:
+            labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
 
         transformer_outputs = self.model(
@@ -964,30 +997,39 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
         logits_shape = shape_list(logits)
-        batch_size = logits_shape[0]
+        in_logits = None
 
         if self.config.pad_token_id is None:
-            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
+            sequence_lengths = -1
         else:
             if input_ids is not None:
-                token_indices = tf.range(shape_list(input_ids)[-1])
-                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
-                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
+                sequence_lengths = (
+                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
+                    - 1
+                )
+                sequence_lengths = tf.where(
+                    sequence_lengths >= 0,
+                    sequence_lengths,
+                    tf.cast(shape_list(input_ids[-1]), sequence_lengths.dtype) - 1,
+                )
+                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
             else:
-                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
+                sequence_lengths = -1
                 logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
-        pooled_logits = tf.gather(logits, last_non_pad_token, batch_dims=1, axis=1)
-
         if labels is not None:
             if self.config.pad_token_id is None and logits_shape[0] != 1:
                 raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
+            if not tf.is_tensor(sequence_lengths):
+                in_logits = logits[0 : logits_shape[0], sequence_lengths]
+
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
+        pooled_logits = in_logits if in_logits is not None else logits
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
@@ -1011,6 +1053,3 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
                 self.score.build((self.config.hidden_size,))
-
-
-__all__ = ["TFMistralModel", "TFMistralForCausalLM", "TFMistralForSequenceClassification", "TFMistralPreTrainedModel"]

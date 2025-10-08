@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Beit."""
 
-from typing import Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -28,7 +28,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -41,7 +41,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.import_utils import requires
+from ...utils.deprecation import deprecate_kwarg
 
 
 if is_vision_available():
@@ -54,7 +54,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@requires(backends=("vision",))
 class BeitImageProcessor(BaseImageProcessor):
     r"""
     Constructs a BEiT image processor.
@@ -63,7 +62,7 @@ class BeitImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
@@ -73,7 +72,7 @@ class BeitImageProcessor(BaseImageProcessor):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by the `do_center_crop` parameter in the
             `preprocess` method.
-        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size when applying center-cropping. Only has an effect if `do_center_crop` is set to `True`.
             Can be overridden by the `crop_size` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
@@ -85,10 +84,10 @@ class BeitImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             The mean to use if normalizing the image. This is a float or list of floats of length of the number of
             channels of the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             The standard deviation to use if normalizing the image. This is a float or list of floats of length of the
             number of channels of the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_reduce_labels (`bool`, *optional*, defaults to `False`):
@@ -100,19 +99,20 @@ class BeitImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     @filter_out_non_signature_kwargs(extra=INIT_SERVICE_KWARGS)
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Optional[dict[str, int]] = None,
+        crop_size: Dict[str, int] = None,
         rescale_factor: Union[int, float] = 1 / 255,
         do_rescale: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: bool = False,
         **kwargs,
     ) -> None:
@@ -133,10 +133,20 @@ class BeitImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_reduce_labels = do_reduce_labels
 
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to save support of deprecated `reduce_labels` in old configs
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
+        return super().from_dict(image_processor_dict, **kwargs)
+
     def resize(
         self,
         image: np.ndarray,
-        size: dict[str, int],
+        size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -148,7 +158,7 @@ class BeitImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`dict[str, int]`):
+            size (`Dict[str, int]`):
                 Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PIL.Image.BICUBIC`):
                 Resampling filter to use when resiizing the image.
@@ -180,17 +190,17 @@ class BeitImageProcessor(BaseImageProcessor):
     def _preprocess(
         self,
         image: ImageInput,
-        do_reduce_labels: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        do_reduce_labels: bool = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_reduce_labels:
@@ -213,23 +223,23 @@ class BeitImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-        if do_rescale and is_scaled_image(image):
+        if is_scaled_image(image) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -258,12 +268,12 @@ class BeitImageProcessor(BaseImageProcessor):
     def _preprocess_segmentation_map(
         self,
         segmentation_map: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_reduce_labels: Optional[bool] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_reduce_labels: bool = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """Preprocesses a single segmentation map."""
@@ -301,21 +311,22 @@ class BeitImageProcessor(BaseImageProcessor):
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.41.0")
     @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: Optional[ImageInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        resample: PILImageResampling = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
@@ -333,14 +344,14 @@ class BeitImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be
                 padded with zeros and then cropped
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -349,9 +360,9 @@ class BeitImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
                 Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
@@ -390,10 +401,10 @@ class BeitImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
 
-        images = make_flat_list_of_images(images)
+        images = make_list_of_images(images)
 
         if segmentation_maps is not None:
-            segmentation_maps = make_flat_list_of_images(segmentation_maps, expected_ndims=2)
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if segmentation_maps is not None and not valid_images(segmentation_maps):
             raise ValueError(
@@ -457,19 +468,19 @@ class BeitImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`BeitForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`list[Tuple]` of length `batch_size`, *optional*):
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
                 List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
                 predictions will not be resized.
 
         Returns:
-            semantic_segmentation: `list[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
@@ -499,6 +510,3 @@ class BeitImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
-
-
-__all__ = ["BeitImageProcessor"]

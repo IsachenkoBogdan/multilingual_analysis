@@ -19,6 +19,7 @@ TF 2.0 DistilBERT model
 from __future__ import annotations
 
 import warnings
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -268,9 +269,9 @@ class TFTransformerBlock(keras.layers.Layer):
         self.activation = config.activation
         self.output_attentions = config.output_attentions
 
-        assert config.dim % config.n_heads == 0, (
-            f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
-        )
+        assert (
+            config.dim % config.n_heads == 0
+        ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
         self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
@@ -343,10 +344,10 @@ class TFTransformer(keras.layers.Layer):
         Returns:
             hidden_state: tf.Tensor(bs, seq_length, dim)
                 Sequence of hidden states in the last (top) layer
-            all_hidden_states: tuple[tf.Tensor(bs, seq_length, dim)]
+            all_hidden_states: Tuple[tf.Tensor(bs, seq_length, dim)]
                 Tuple of length n_layers with the hidden states from each layer.
                 Optional: only if output_hidden_states=True
-            all_attentions: tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
+            all_attentions: Tuple[tf.Tensor(bs, n_heads, seq_length, seq_length)]
                 Tuple of length n_layers with the attention weights from each layer
                 Optional: only if output_attentions=True
         """
@@ -593,11 +594,11 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        training: bool | None = False,
-    ) -> TFBaseModelOutput | tuple[tf.Tensor]:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         outputs = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -696,12 +697,12 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFMaskedLMOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -793,12 +794,12 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFSequenceClassifierOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -881,12 +882,12 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFTokenClassifierOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -968,12 +969,12 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         labels: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFMultipleChoiceModelOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices]`
@@ -1070,13 +1071,13 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         attention_mask: np.ndarray | tf.Tensor | None = None,
         head_mask: np.ndarray | tf.Tensor | None = None,
         inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         start_positions: np.ndarray | tf.Tensor | None = None,
         end_positions: np.ndarray | tf.Tensor | None = None,
-        training: bool | None = False,
-    ) -> TFQuestionAnsweringModelOutput | tuple[tf.Tensor]:
+        training: Optional[bool] = False,
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1132,15 +1133,3 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.dim])
-
-
-__all__ = [
-    "TFDistilBertForMaskedLM",
-    "TFDistilBertForMultipleChoice",
-    "TFDistilBertForQuestionAnswering",
-    "TFDistilBertForSequenceClassification",
-    "TFDistilBertForTokenClassification",
-    "TFDistilBertMainLayer",
-    "TFDistilBertModel",
-    "TFDistilBertPreTrainedModel",
-]

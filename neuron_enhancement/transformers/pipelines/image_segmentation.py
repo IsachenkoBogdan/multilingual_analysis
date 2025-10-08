@@ -1,4 +1,4 @@
-from typing import Any, Union, overload
+from typing import Any, Dict, List, Union
 
 import numpy as np
 
@@ -21,6 +21,10 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+Prediction = Dict[str, Any]
+Predictions = List[Prediction]
 
 
 @add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
@@ -60,11 +64,6 @@ class ImageSegmentationPipeline(Pipeline):
     [huggingface.co/models](https://huggingface.co/models?filter=image-segmentation).
     """
 
-    _load_processor = False
-    _load_image_processor = True
-    _load_feature_extractor = False
-    _load_tokenizer = None  # Oneformer uses it but no-one else does
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -95,20 +94,12 @@ class ImageSegmentationPipeline(Pipeline):
 
         return preprocess_kwargs, {}, postprocess_kwargs
 
-    @overload
-    def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
-
-    @overload
-    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
-
-    def __call__(
-        self, inputs: Union[str, "Image.Image", list[str], list["Image.Image"]], **kwargs: Any
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    def __call__(self, images, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
         Perform segmentation (detect masks & classes) in the image(s) passed as inputs.
 
         Args:
-            inputs (`str`, `list[str]`, `PIL.Image` or `list[PIL.Image]`):
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
                 - A string containing an HTTP(S) link pointing to an image
@@ -132,8 +123,9 @@ class ImageSegmentationPipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            If the input is a single image, will return a list of dictionaries, if the input is a list of several images,
-            will return a list of list of dictionaries corresponding to each image.
+            A dictionary or a list of dictionaries containing the result. If the input is a single image, will return a
+            list of dictionaries, if the input is a list of several images, will return a list of list of dictionaries
+            corresponding to each image.
 
             The dictionaries contain the mask, label and score (where applicable) of each detected object and contains
             the following keys:
@@ -144,12 +136,7 @@ class ImageSegmentationPipeline(Pipeline):
             - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
               "object" described by the label and the mask.
         """
-        # After deprecation of this is completed, remove the default `None` value for `images`
-        if "images" in kwargs:
-            inputs = kwargs.pop("images")
-        if inputs is None:
-            raise ValueError("Cannot call the image-classification pipeline without an inputs argument!")
-        return super().__call__(inputs, **kwargs)
+        return super().__call__(images, **kwargs)
 
     def preprocess(self, image, subtask=None, timeout=None):
         image = load_image(image, timeout=timeout)
@@ -160,8 +147,6 @@ class ImageSegmentationPipeline(Pipeline):
             else:
                 kwargs = {"task_inputs": [subtask]}
             inputs = self.image_processor(images=[image], return_tensors="pt", **kwargs)
-            if self.framework == "pt":
-                inputs = inputs.to(self.dtype)
             inputs["task_inputs"] = self.tokenizer(
                 inputs["task_inputs"],
                 padding="max_length",
@@ -170,8 +155,6 @@ class ImageSegmentationPipeline(Pipeline):
             )["input_ids"]
         else:
             inputs = self.image_processor(images=[image], return_tensors="pt")
-            if self.framework == "pt":
-                inputs = inputs.to(self.dtype)
         inputs["target_size"] = target_size
         return inputs
 

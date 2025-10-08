@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
@@ -412,18 +412,17 @@ class FlaxViTPooler(nn.Module):
 
     def setup(self):
         self.dense = nn.Dense(
-            self.config.pooler_output_size,
+            self.config.hidden_size,
             kernel_init=jax.nn.initializers.variance_scaling(
                 self.config.initializer_range**2, "fan_in", "truncated_normal"
             ),
             dtype=self.dtype,
         )
-        self.activation = ACT2FN[self.config.pooler_act]
 
     def __call__(self, hidden_states):
         cls_hidden_state = hidden_states[:, 0]
         cls_hidden_state = self.dense(cls_hidden_state)
-        return self.activation(cls_hidden_state)
+        return nn.tanh(cls_hidden_state)
 
 
 class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
@@ -451,7 +450,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
             input_shape = (1, config.image_size, config.image_size, config.num_channels)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
@@ -474,7 +473,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         pixel_values,
-        params: Optional[dict] = None,
+        params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
@@ -672,6 +671,3 @@ overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCS
 append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
-
-
-__all__ = ["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"]

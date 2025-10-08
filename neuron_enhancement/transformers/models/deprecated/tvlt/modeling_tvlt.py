@@ -18,14 +18,14 @@ import collections.abc
 import math
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import torch
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
-from ....modeling_layers import GradientCheckpointingLayer
 from ....modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from ....modeling_utils import PreTrainedModel
 from ....pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
@@ -75,15 +75,15 @@ class TvltModelOutput(ModelOutput):
             the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    last_pixel_hidden_state: Optional[torch.FloatTensor] = None
-    last_audio_hidden_state: Optional[torch.FloatTensor] = None
-    pixel_label_masks: Optional[torch.LongTensor] = None
-    audio_label_masks: Optional[torch.LongTensor] = None
-    pixel_ids_restore: Optional[torch.LongTensor] = None
-    audio_ids_restore: Optional[torch.LongTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor = None
+    last_pixel_hidden_state: torch.FloatTensor = None
+    last_audio_hidden_state: torch.FloatTensor = None
+    pixel_label_masks: torch.LongTensor = None
+    audio_label_masks: torch.LongTensor = None
+    pixel_ids_restore: torch.LongTensor = None
+    audio_ids_restore: torch.LongTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -104,9 +104,9 @@ class TvltDecoderOutput(ModelOutput):
             the self-attention heads.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -136,11 +136,11 @@ class TvltForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    matching_logits: Optional[torch.FloatTensor] = None
-    pixel_logits: Optional[torch.FloatTensor] = None
-    audio_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    matching_logits: torch.FloatTensor = None
+    pixel_logits: torch.FloatTensor = None
+    audio_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def generate_pixel_mask_noise(pixel_values, pixel_mask=None, mask_ratio=0.75):
@@ -345,7 +345,7 @@ class TvltSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -483,7 +483,7 @@ class TvltOutput(nn.Module):
         return hidden_states
 
 
-class TvltLayer(GradientCheckpointingLayer):
+class TvltLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config):
@@ -546,7 +546,16 @@ class TvltEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
-            layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -571,7 +580,7 @@ class TvltPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config: TvltConfig
+    config_class = TvltConfig
     base_model_prefix = "tvlt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -692,7 +701,7 @@ class TvltModel(TvltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], TvltModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], TvltModelOutput]:
         r"""
         Returns:
 
@@ -844,7 +853,15 @@ class TvltDecoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
+                    hidden_states,
+                    None,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -1013,7 +1030,7 @@ class TvltForPreTraining(TvltPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], TvltForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], TvltForPreTrainingOutput]:
         r"""
         pixel_values_mixed (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, height, width)`):
             Pixel values that mix positive and negative samples in Tvlt vision-audio matching. Audio values can be
@@ -1212,7 +1229,7 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], SequenceClassifierOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, num_labels)`, *optional*):
             Labels for computing the audiovisual loss. Indices should be in `[0, ..., num_classes-1]` where num_classes
@@ -1269,6 +1286,3 @@ class TvltForAudioVisualClassification(TvltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-__all__ = ["TvltModel", "TvltForPreTraining", "TvltForAudioVisualClassification", "TvltPreTrainedModel"]

@@ -18,8 +18,7 @@ import collections
 import json
 import os
 import re
-import sys
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -162,7 +161,19 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    @property
+    def default_chat_template(self):
+        """
+        A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
+        """
+        return (
+            "{% for message in messages %}"
+            "{{ bos_token + eos_token + message.content + eos_token }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
+        )
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
@@ -193,9 +204,9 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
 
-class SubWordJapaneseTokenizer:
+class SubWordJapaneseTokenizer(object):
     """
-    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT License according to the
+    https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
     original repository.
 
     MIT License
@@ -221,7 +232,7 @@ class SubWordJapaneseTokenizer:
         self.vocab = vocab  # same as swe
         self.ids_to_tokens = ids_to_tokens  # same as bpe
         self.emoji = emoji
-        self.maxlen = np.max([len(w) for w in self.vocab])
+        self.maxlen = np.max([len(w) for w in self.vocab.keys()])
         self.content_repatter1 = re.compile(r"(https?|ftp)(:\/\/[-_\.!~*\'()a-zA-Z0-9;\/?:\@&=\+$,%#]+)")
         self.content_repatter2 = re.compile(r"[A-Za-z0-9\._+]*@[\-_0-9A-Za-z]+(\.[A-Za-z]+)*")
         self.content_repatter3 = re.compile(r"[\(]{0,1}[0-9]{2,4}[\)\-\(]{0,1}[0-9]{2,4}[\)\-]{0,1}[0-9]{3,4}")
@@ -231,26 +242,12 @@ class SubWordJapaneseTokenizer:
         self.content_repatter5 = re.compile(
             r"(明治|大正|昭和|平成|令和|㍾|㍽|㍼|㍻|\u32ff)\d{1,2}年(0?[1-9]|1[0-2])月(0?[1-9]|[12][0-9]|3[01])日(\d{1,2}|:|\d{1,2}時|\d{1,2}分|\(日\)|\(月\)|\(火\)|\(水\)|\(木\)|\(金\)|\(土\)|㈰|㈪|㈫|㈬|㈭|㈮|㈯)*"
         )
-        # The original version of this regex displays catastrophic backtracking behaviour. We avoid this using
-        # possessive quantifiers in Py >= 3.11. In versions below this, we avoid the vulnerability using a slightly
-        # different regex that should generally have the same behaviour in most non-pathological cases.
-        if sys.version_info >= (3, 11):
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億])*+"
-                r"(?:\d,\d{3}|[\d万])*+"
-                r"(?:\d,\d{3}|[\d千])*+"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
-        else:
-            self.content_repatter6 = re.compile(
-                r"(?:\d,\d{3}|[\d億万千])*"
-                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(?:\(税込\)|\(税抜\)|\+tax)*"
-            )
+        self.content_repatter6 = re.compile(
+            r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*億)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*万)*((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*千)*(0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*(千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+(\(税込\)|\(税抜\)|\+tax)*"
+        )
         keisen = "─━│┃┄┅┆┇┈┉┊┋┌┍┎┏┐┑┒┓└┕┖┗┘┙┚┛├┝┞┟┠┡┢┣┤┥┦┧┨┩┪┫┬┭┮┯┰┱┲┳┴┵┶┷┸┹┺┻┼┽┾┿╀╁╂╃╄╅╆╇╈╉╊╋╌╍╎╏═║╒╓╔╕╖╗╘╙╚╛╜╝╞╟╠╡╢╣╤╥╦╧╨╩╪╫╬╭╮╯╰╱╲╳╴╵╶╷╸╹╺╻╼╽╾╿"
         blocks = "▀▁▂▃▄▅▆▇█▉▊▋▌▍▎▏▐░▒▓▔▕▖▗▘▙▚▛▜▝▞▟"
-        self.content_trans1 = str.maketrans(dict.fromkeys(keisen + blocks, "<BLOCK>"))
+        self.content_trans1 = str.maketrans({k: "<BLOCK>" for k in keisen + blocks})
 
     def __len__(self):
         return len(self.ids_to_tokens)
@@ -318,7 +315,7 @@ class SubWordJapaneseTokenizer:
                         candidates.append((self.vocab[wd], wd, e))
             if len(candidates) > 0:
                 # the smallest token_id is adopted
-                _, wd, e = min(candidates, key=lambda x: x[0])
+                _, wd, e = sorted(candidates, key=lambda x: x[0])[0]
                 result.append(wd)
                 pos = e
             else:
@@ -364,6 +361,3 @@ class SubWordJapaneseTokenizer:
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
-
-
-__all__ = ["GPTNeoXJapaneseTokenizer"]

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for EfficientNet."""
 
-from typing import Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
@@ -28,12 +28,13 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_flat_list_of_images,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
+    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 
 
 if is_vision_available():
@@ -51,14 +52,14 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in `preprocess`.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 346, "width": 346}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
         resample (`PILImageResampling` filter, *optional*, defaults to 0):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in `preprocess`.
-        crop_size (`dict[str, int]`, *optional*, defaults to `{"height": 289, "width": 289}`):
+        crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 289, "width": 289}`):
             Desired output size when applying center-cropping. Can be overridden by `crop_size` in `preprocess`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
@@ -72,10 +73,10 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         include_top (`bool`, *optional*, defaults to `True`):
@@ -87,16 +88,16 @@ class EfficientNetImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = PIL.Image.NEAREST,
         do_center_crop: bool = False,
-        crop_size: Optional[dict[str, int]] = None,
+        crop_size: Dict[str, int] = None,
         rescale_factor: Union[int, float] = 1 / 255,
         rescale_offset: bool = False,
         do_rescale: bool = True,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         include_top: bool = True,
         **kwargs,
     ) -> None:
@@ -118,12 +119,30 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
+        self._valid_processor_keys = [
+            "images",
+            "do_resize",
+            "size",
+            "resample",
+            "do_center_crop",
+            "crop_size",
+            "do_rescale",
+            "rescale_factor",
+            "rescale_offset",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "include_top",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.NEAREST
     def resize(
         self,
         image: np.ndarray,
-        size: dict[str, int],
+        size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.NEAREST,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -135,7 +154,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`dict[str, int]`):
+            size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.NEAREST`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.NEAREST`.
@@ -208,25 +227,25 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         return rescaled_image
 
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
         resample=None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        rescale_offset: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        include_top: Optional[bool] = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: float = None,
+        rescale_offset: bool = None,
+        do_normalize: bool = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        include_top: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -237,14 +256,14 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to `self.size`):
+            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after `resize`.
             resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
                 PILImageResampling filter to use if resizing the image Only has an effect if `do_resize` is set to
                 `True`.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
-            crop_size (`dict[str, int]`, *optional*, defaults to `self.crop_size`):
+            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
                 Size of the image after center crop. If one edge the image is smaller than `crop_size`, it will be
                 padded with zeros and then cropped
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
@@ -255,9 +274,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
                 Whether to rescale the image between [-scale_range, scale_range] instead of [0, scale_range].
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to `self.image_mean`):
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean.
-            image_std (`float` or `list[float]`, *optional*, defaults to `self.image_std`):
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
             include_top (`bool`, *optional*, defaults to `self.include_top`):
                 Rescales the image again for image classification if set to True.
@@ -295,7 +314,9 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        images = make_flat_list_of_images(images)
+        images = make_list_of_images(images)
+
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(
@@ -317,7 +338,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if do_rescale and is_scaled_image(images[0]):
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -364,6 +385,3 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-
-__all__ = ["EfficientNetImageProcessor"]
